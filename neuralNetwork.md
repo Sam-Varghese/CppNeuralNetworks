@@ -32,7 +32,7 @@ For programming the neurons, each neurons will have the following parameters ass
 
 ### Sigmoid
 
-`f(x) = 1/(1 + e<sup>-x</sup>)`
+f(x) = 1/(1 + e<sup>-x</sup>)
 
 ### ReLU
 
