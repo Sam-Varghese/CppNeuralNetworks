@@ -33,24 +33,30 @@ public:
         return this->output;
     }
 
-    double linear(){
+    double linear()
+    {
         return this->z;
     }
 
     //* Getting derivative values of activation functions
-    
-    double sigmoidDerivative(){
+
+    double sigmoidDerivative()
+    {
         // Assuming that the output already contains the sigmoid of z
         // Formula = g(z) * (1 - g(z))
         this->derivativeOutput = this->output * (1 - this->output);
         return this->derivativeOutput;
     }
 
-    int reLUDerivative(){
+    int reLUDerivative()
+    {
         // 0 if x < 0 and 1 if x >= 0
-        if(this->output < 0){
+        if (this->output < 0)
+        {
             this->derivativeOutput = 0;
-        } else {
+        }
+        else
+        {
             this->derivativeOutput = 1;
         }
 
@@ -71,6 +77,7 @@ public:
     {
         this->connectionCount = inputConnectionCount;
         srand((unsigned)time(NULL));
+        // Each neuron will initialize the weights randomly for the output neurons
         for (int i = 0; i < this->connectionCount; i++)
         {
             this->weight[i] = (double)rand() / RAND_MAX;
@@ -101,7 +108,8 @@ private:
     // LayerIndex keeps a unique index for all layers so they can be differentiated
     // outputLayer count keeps a count of number of neurons that comes after this layer so it can initiate that many weights and biases
     int neuronCount, layerIndex, outputLayerCount;
-    vector<double> layerOutput, biases;
+    // A layer should know the values of all biases of next layer so as to computer w*x + b, as b here refers to bias of next layer
+    vector<double> layerOutput, currentLayerBiases, nextLayerBiases;
     vector<Neuron> neuronCollection;
     vector<double> activationValues;
     vector<vector<double>> weights;
@@ -118,6 +126,8 @@ public:
         {
             this->neuronCollection.push_back(Neuron(this->outputLayerCount));
         }
+        // Storing the randomly generated weights of each neuron in weights 2D array
+        collectWeights();
     }
 
     void setNeuronActivations(vector<double> inputActivationValues)
@@ -141,7 +151,7 @@ public:
             {
                 predictions.back() += this->weights[i][output] * this->activationValues[i];
             }
-            predictions.back() += this->biases[output];
+            predictions.back() += this->nextLayerBiases[output];
         }
         // Applying activation functions
         if (this->activation == "relu")
@@ -173,12 +183,21 @@ public:
         }
     }
 
-    void collectBiases()
+    void setNextLayerBiases(vector<double> nextLayerBiasesInput)
+    {
+        // nth layers uses the bias values of (n+1)th layer
+        this->nextLayerBiases = nextLayerBiasesInput;
+    }
+    void setCurrentLayerBiases()
     {
         for (int i = 0; i < this->neuronCount; i++)
         {
-            this->biases.push_back(this->neuronCollection[i].getBias());
+            this->currentLayerBiases.push_back(this->neuronCollection[i].getBias());
         }
+    }
+    vector<double> getCurrentLayerBiases()
+    {
+        return this->currentLayerBiases;
     }
 };
 
@@ -186,10 +205,72 @@ class NeuralNetwork
 {
 private:
     vector<int> networkArchitecture;
+    vector<string> activations;
+    vector<Layer> layers;
+    vector<double> activationValues;
+
+    /* For all the training example, store the activation values that were calculated (of all layers), so that backpropagation may be implemented. It's a 3D vector, so it's elements will
+
+        [
+             [ [layer1], [layer2] ], 1st training example values
+             [ [layer1], [layer2] ], 2nd training example values
+             ...
+        ]
+    */
+    vector<vector<vector<double>>> activationCompilation;
 
 public:
-    NeuralNetwork(vector<int> inputNetworkArchitecture){
+    NeuralNetwork(vector<int> inputNetworkArchitecture, vector<string> layerActivations)
+    {
+
+        // Appending a 0 in the end of architecture to denote that it doesn't have any layer afterwards, hence this is the last layer.
+        inputNetworkArchitecture.push_back(0);
+
         this->networkArchitecture = inputNetworkArchitecture;
+        this->activations = layerActivations;
+
+        // Creating layers in the neural network
+
+        for (int i = 0; i < inputNetworkArchitecture.size(); i++)
+        {
+            layers.push_back(Layer(this->networkArchitecture[i], i, this->networkArchitecture[i + 1], this->activations[i]));
+        }
+
+        // Informing the layers, biases of neurons of next layer for enabling them to computer w*x + b
+
+        for (int i = 0; i < inputNetworkArchitecture.size() - 1; i++)
+        {
+            this->layers[i].setNextLayerBiases(this->layers[i + 1].getCurrentLayerBiases());
+        }
+    }
+    bool setActivationValues(vector<double> inputActivationValues)
+    {
+        if (inputActivationValues.size() != this->networkArchitecture[0])
+        {
+            cout << "Error: Activation size doesn't match network topology.";
+            return false;
+        }
+
+        this->layers[0].setNeuronActivations(inputActivationValues);
+
+        return true;
+    }
+
+    vector<double> startFeedForward()
+    {
+        // Returns the activations of output layer
+        vector<vector<double>> finalActivations;
+        vector<double> layerOutput;
+        // Executing a loop for feed forward mechanism, but this loop will not run for the last layer because it needs to be handled a bit differently
+        for (int i = 0; i < this->layers.size() - 1; i++)
+        {
+            layerOutput = this->layers[i].computeLayerOutput();
+            finalActivations.push_back(layerOutput);
+            this->layers[i].setNeuronActivations(layerOutput);
+        }
+        // Pushing all the activation values of all layers into the activationCompilation 3D vector
+        this->activationCompilation.push_back(finalActivations);
+        return layerOutput;
     }
 };
 
